@@ -30,6 +30,8 @@ language=os.environ.get("language","Auto")
 language=sys.argv[-1] if sys.argv[-1] in scan_language_list() else language
 i18n = I18nAuto(language=language)
 
+from filelock import WindowsFileLock
+
 # configs/tts_infer.yaml
 """
 custom:
@@ -187,9 +189,10 @@ class TTS_Config:
         else:
             print(i18n("路径不存在,使用默认配置"))
             self.save_configs(configs_path)
-        with open(configs_path, 'r') as f:
-            configs = yaml.load(f, Loader=yaml.FullLoader)
-    
+        lock=WindowsFileLock(f"{configs_path}.lock")
+        with lock:
+            with open(configs_path, 'r') as f:            
+                configs = yaml.load(f, Loader=yaml.FullLoader)    
         return configs
 
     def save_configs(self, configs_path:str=None)->None:
@@ -199,8 +202,14 @@ class TTS_Config:
             
         if configs_path is None:
             configs_path = self.configs_path
-        with open(configs_path, 'w') as f:
-            yaml.dump(configs, f)
+
+        lock=WindowsFileLock(f"{configs_path}.lock",timeout=3)
+        try:
+            with lock:
+                with open(configs_path, 'w') as f:
+                    yaml.dump(configs, f)
+        except:
+            print("failed to save config.")
 
     def update_configs(self):
         self.config = {
@@ -301,7 +310,7 @@ class TTS:
         if self.configs.is_half and str(self.configs.device)!="cpu":
             self.bert_model = self.bert_model.half()
         
-    def init_vits_weights(self, weights_path: str):
+    def init_vits_weights(self, weights_path: str, save=True):
         print(f"Loading VITS weights from {weights_path}")
         self.configs.vits_weights_path = weights_path
         dict_s2 = torch.load(weights_path, map_location=self.configs.device)
@@ -310,7 +319,9 @@ class TTS:
             self.configs.update_version("v1")
         else:
             self.configs.update_version("v2")
-        self.configs.save_configs()
+
+        if save:
+            self.configs.save_configs()
         
         hps["model"]["version"] = self.configs.version
         self.configs.filter_length = hps["data"]["filter_length"]
@@ -339,10 +350,11 @@ class TTS:
             self.vits_model = self.vits_model.half()
 
         
-    def init_t2s_weights(self, weights_path: str):
+    def init_t2s_weights(self, weights_path: str, save=True):
         print(f"Loading Text2Semantic weights from {weights_path}")
         self.configs.t2s_weights_path = weights_path
-        self.configs.save_configs()
+        if save:
+            self.configs.save_configs()
         self.configs.hz = 50
         dict_s1 = torch.load(weights_path, map_location=self.configs.device)
         config = dict_s1["config"]
