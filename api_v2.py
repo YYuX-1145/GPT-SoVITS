@@ -129,12 +129,14 @@ cut_method_names = get_cut_method_names()
 parser = argparse.ArgumentParser(description="GPT-SoVITS api")
 parser.add_argument("-c", "--tts_config", type=str, default="GPT_SoVITS/configs/tts_infer.yaml", help="tts_infer路径")
 parser.add_argument("-a", "--bind_addr", type=str, default="127.0.0.1", help="default: 127.0.0.1")
+parser.add_argument("-w", "--workers", type=int, default=1, help="num_workers")
 parser.add_argument("-p", "--port", type=int, default="9880", help="default: 9880")
 args = parser.parse_args()
 config_path = args.tts_config
 # device = args.device
 port = args.port
 host = args.bind_addr
+workers = args.workers
 argv = sys.argv
 
 if config_path in [None, ""]:
@@ -273,6 +275,12 @@ def check_params(req:dict):
     return None
 
 async def tts_handle(req:dict):
+    if workers>1:
+        tts_config = TTS_Config(config_path)
+        if tts_pipeline.configs.t2s_weights_path!=tts_config.t2s_weights_path:
+            tts_pipeline.init_t2s_weights(tts_config.t2s_weights_path,save=False)
+        if tts_pipeline.configs.vits_weights_path!=tts_config.vits_weights_path:
+            tts_pipeline.init_vits_weights(tts_config.vits_weights_path,save=False)
     """
     Text to speech handler.
     
@@ -410,13 +418,13 @@ async def tts_post_endpoint(request: TTS_Request):
     return await tts_handle(req)
 
 
-@APP.get("/set_refer_audio")
-async def set_refer_aduio(refer_audio_path: str = None):
-    try:
-        tts_pipeline.set_ref_audio(refer_audio_path)
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"message": f"set refer audio failed", "Exception": str(e)})
-    return JSONResponse(status_code=200, content={"message": "success"})
+# @APP.get("/set_refer_audio")
+# async def set_refer_aduio(refer_audio_path: str = None):
+#     try:
+#         tts_pipeline.set_ref_audio(refer_audio_path)
+#     except Exception as e:
+#         return JSONResponse(status_code=400, content={"message": f"set refer audio failed", "Exception": str(e)})
+#     return JSONResponse(status_code=200, content={"message": "success"})
 
 
 # @APP.post("/set_refer_audio")
@@ -441,8 +449,11 @@ async def set_refer_aduio(refer_audio_path: str = None):
 async def set_gpt_weights(weights_path: str = None):
     try:
         if weights_path in ["", None]:
-            return JSONResponse(status_code=400, content={"message": "gpt weight path is required"})
-        tts_pipeline.init_t2s_weights(weights_path)
+            return JSONResponse(status_code=400, content={"message": "gpt weight path is required"})        
+        tts_pipeline.init_t2s_weights(weights_path,save=False)
+        tts_config = TTS_Config(config_path)
+        tts_config.t2s_weights_path=weights_path
+        tts_config.save_configs()
     except Exception as e:
         return JSONResponse(status_code=400, content={"message": f"change gpt weight failed", "Exception": str(e)})
 
@@ -453,8 +464,11 @@ async def set_gpt_weights(weights_path: str = None):
 async def set_sovits_weights(weights_path: str = None):
     try:
         if weights_path in ["", None]:
-            return JSONResponse(status_code=400, content={"message": "sovits weight path is required"})
-        tts_pipeline.init_vits_weights(weights_path)
+            return JSONResponse(status_code=400, content={"message": "sovits weight path is required"})        
+        tts_pipeline.init_vits_weights(weights_path,save=False)
+        tts_config = TTS_Config(config_path)
+        tts_config.vits_weights_path=weights_path
+        tts_config.save_configs()
     except Exception as e:
         return JSONResponse(status_code=400, content={"message": f"change sovits weight failed", "Exception": str(e)})
     return JSONResponse(status_code=200, content={"message": "success"})
@@ -465,7 +479,7 @@ if __name__ == "__main__":
     try:
         if host == 'None':   # 在调用时使用 -a None 参数，可以让api监听双栈
             host = None
-        uvicorn.run(app=APP, host=host, port=port, workers=1)
+        uvicorn.run(app=f'{os.path.basename(__file__).split(".")[0]}:APP',host=host, port=port, workers=workers)
     except Exception as e:
         traceback.print_exc()
         os.kill(os.getpid(), signal.SIGTERM)
