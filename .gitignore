@@ -1,5 +1,12 @@
 .DS_Store
 .vscode
+*Data*
+*.json
+*.yaml
+BigVGAN
+*cache*
+*.yaml
+*user*dict*
 __pycache__
 *.pyc
 env
