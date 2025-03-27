@@ -7,4 +7,4 @@
 1. When unzipping and using it for the first time, please open go-webui.bat. You can close it after the webui pops up. This is used to activate the environment to avoid error messages due to modules not found.
 2. Chinese characters should not be in the fullpath to avoid errors in the Japanese G2P.
 3. Declaration: This integrated package is modified from the official integrated package. Code repository: https://github.com/YYuX-1145/GPT-SoVITS. 
-The training and inference code is the same as that in the official repository, and the built-in models have not been deleted at all. And there will be no difference between training and inference. 
+The code for training and inference is the same as that in the official repository and none of the built-in or pretrained models were removed. And there will be no difference in training and inference.
