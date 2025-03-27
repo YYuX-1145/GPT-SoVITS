@@ -1,0 +1,10 @@
+如果你已经用上了本项目，我认为你不需要下载此集成整合包！
+1.初次解压使用，请打开一次go-webui.bat，直到webui弹出为止可关闭，用于激活环境避免模块找不到报错。
+2.路径中不要有中文，以免日语G2P报错。
+3.声明：本整合包修改自官方整合包。代码仓库：https://github.com/YYuX-1145/GPT-SoVITS
+训练推理代码和官方仓库一致，内置模型没有任何删减，训练和推理不会有任何区别。
+
+1. When unzipping and using it for the first time, please open go-webui.bat. You can close it after the webui pops up. This is used to activate the environment to avoid error messages due to modules not found.
+2. Chinese characters should not be in the fullpath to avoid errors in the Japanese G2P.
+3. Declaration: This integrated package is modified from the official integrated package. Code repository: https://github.com/YYuX-1145/GPT-SoVITS. 
+The training and inference code is the same as that in the official repository, and the built-in models have not been deleted at all. And there will be no difference between training and inference. 
