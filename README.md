@@ -44,12 +44,15 @@ For users in China, you can [click here](https://www.codewithgpu.com/i/RVC-Boss/
 
 ### Tested Environments
 
-- Python 3.9, PyTorch 2.0.1, CUDA 11
-- Python 3.10.13, PyTorch 2.1.2, CUDA 12.3
-- Python 3.9, PyTorch 2.2.2, macOS 14.4.1 (Apple silicon)
-- Python 3.9, PyTorch 2.2.2, CPU devices
-
-_Note: numba==0.56.4 requires py<3.11_
+| Python Version | PyTorch Version  | Device          |
+|----------------|------------------|-----------------|
+| Python 3.9     | PyTorch 2.0.1    | CUDA 11.8       |
+| Python 3.10.13 | PyTorch 2.1.2    | CUDA 12.3       |
+| Python 3.10.17 | PyTorch 2.5.1    | CUDA 12.4       |
+| Python 3.9     | PyTorch 2.5.1    | Apple silicon   |
+| Python 3.11    | PyTorch 2.6.0    | Apple silicon   |
+| Python 3.9     | PyTorch 2.2.2    | CPU             |
+| Python 3.9     | PyTorch 2.8.0dev | CUDA12.8(for Nvidia50x0)  |
 
 ### Windows
 
@@ -62,7 +65,7 @@ If you are a Windows user (tested with win>=10), you can [download the integrate
 ```bash
 conda create -n GPTSoVits python=3.9
 conda activate GPTSoVits
-bash install.sh
+bash install.sh --source <HF|HF-Mirror|ModelScope> [--download-uvr5]
 ```
 
 ### macOS
@@ -70,14 +73,12 @@ bash install.sh
 **Note: The models trained with GPUs on Macs result in significantly lower quality compared to those trained on other devices, so we are temporarily using CPUs instead.**
 
 1. Install Xcode command-line tools by running `xcode-select --install`.
-2. Install FFmpeg by running `brew install ffmpeg`.
-3. Install the program by running the following commands:
+2. Install the program by running the following commands:
 
 ```bash
 conda create -n GPTSoVits python=3.9
 conda activate GPTSoVits
-pip install -r extra-req.txt --no-deps
-pip install -r requirements.txt
+bash install.sh --source <HF|HF-Mirror|ModelScope> [--download-uvr5]
 ```
 
 ### Install Manually
@@ -121,11 +122,11 @@ pip install -r requirements.txt
 
 #### docker-compose.yaml configuration
 
-0. Regarding image tags: Due to rapid updates in the codebase and the slow process of packaging and testing images, please check [Docker Hub](https://hub.docker.com/r/breakstring/gpt-sovits) for the currently packaged latest images and select as per your situation, or alternatively, build locally using a Dockerfile according to your own needs.
-1. Environment Variables：
+0. Regarding image tags: Due to rapid updates in the codebase and the slow process of packaging and testing images, please check [Docker Hub](https://hub.docker.com/r/breakstring/gpt-sovits)(outdated) for the currently packaged latest images and select as per your situation, or alternatively, build locally using a Dockerfile according to your own needs.
+1. Environment Variables: 
    - is_half: Controls half-precision/double-precision. This is typically the cause if the content under the directories 4-cnhubert/5-wav32k is not generated correctly during the "SSL extracting" step. Adjust to True or False based on your actual situation.
-2. Volumes Configuration，The application's root directory inside the container is set to /workspace. The default docker-compose.yaml lists some practical examples for uploading/downloading content.
-3. shm_size： The default available memory for Docker Desktop on Windows is too small, which can cause abnormal operations. Adjust according to your own situation.
+2. Volumes Configuration, The application's root directory inside the container is set to /workspace. The default docker-compose.yaml lists some practical examples for uploading/downloading content.
+3. shm_size: The default available memory for Docker Desktop on Windows is too small, which can cause abnormal operations. Adjust according to your own situation.
 4. Under the deploy section, GPU-related settings should be adjusted cautiously according to your system and actual circumstances.
 
 #### Running with docker compose
@@ -144,11 +145,13 @@ docker run --rm -it --gpus=all --env=is_half=False --volume=G:\GPT-SoVITS-Docker
 
 ## Pretrained Models
 
+**If `install.sh` runs successfully, you may skip No.1,2,3**
+
 **Users in China can [download all these models here](https://www.yuque.com/baicaigongchang1145haoyuangong/ib3g1e/dkxgpiy9zb96hob4#nVNhX).**
 
 1. Download pretrained models from [GPT-SoVITS Models](https://huggingface.co/lj1995/GPT-SoVITS) and place them in `GPT_SoVITS/pretrained_models`.
 
-2. Download G2PW models from [G2PWModel_1.1.zip](https://paddlespeech.cdn.bcebos.com/Parakeet/released_models/g2p/G2PWModel_1.1.zip), unzip and rename to `G2PWModel`, and then place them in `GPT_SoVITS/text`.(Chinese TTS Only)
+2. Download G2PW models from [G2PWModel.zip(HF)](https://huggingface.co/XXXXRT/GPT-SoVITS-Pretrained/resolve/main/G2PWModel.zip)| [G2PWModel.zip(ModelScope)](https://www.modelscope.cn/models/XXXXRT/GPT-SoVITS-Pretrained/resolve/master/G2PWModel.zip), unzip and rename to `G2PWModel`, and then place them in `GPT_SoVITS/text`.(Chinese TTS Only)
 
 3. For UVR5 (Vocals/Accompaniment Separation & Reverberation Removal, additionally), download models from [UVR5 Weights](https://huggingface.co/lj1995/VoiceConversionWebUI/tree/main/uvr5_weights) and place them in `tools/uvr5/uvr5_weights`.
 
@@ -258,7 +261,7 @@ Use v2 from v1 environment:
 
 3. Download v2 pretrained models from [huggingface](https://huggingface.co/lj1995/GPT-SoVITS/tree/main/gsv-v2final-pretrained) and put them into `GPT_SoVITS\pretrained_models\gsv-v2final-pretrained`.
 
-   Chinese v2 additional: [G2PWModel_1.1.zip](https://paddlespeech.cdn.bcebos.com/Parakeet/released_models/g2p/G2PWModel_1.1.zip)（Download G2PW models, unzip and rename to `G2PWModel`, and then place them in `GPT_SoVITS/text`.
+   Chinese v2 additional: [G2PWModel.zip(HF)](https://huggingface.co/XXXXRT/GPT-SoVITS-Pretrained/resolve/main/G2PWModel.zip)| [G2PWModel.zip(ModelScope)](https://www.modelscope.cn/models/XXXXRT/GPT-SoVITS-Pretrained/resolve/master/G2PWModel.zip)(Download G2PW models, unzip and rename to `G2PWModel`, and then place them in `GPT_SoVITS/text`.)
 
 ## V3 Release Notes
 
@@ -268,7 +271,7 @@ New Features:
 
 2. GPT model is more stable, with fewer repetitions and omissions, and it is easier to generate speech with richer emotional expression.
 
-   [more details](<https://github.com/RVC-Boss/GPT-SoVITS/wiki/GPT%E2%80%90SoVITS%E2%80%90v3%E2%80%90features-(%E6%96%B0%E7%89%B9%E6%80%A7)>)
+   [more details](<https://github.com/RVC-Boss/GPT-SoVITS/wiki/GPT%E2%80%90SoVITS%E2%80%90v3v4%E2%80%90features-(%E6%96%B0%E7%89%B9%E6%80%A7)>)
 
 Use v3 from v2 environment:
 
@@ -279,6 +282,21 @@ Use v3 from v2 environment:
 3. Download v3 pretrained models (s1v3.ckpt, s2Gv3.pth and models--nvidia--bigvgan_v2_24khz_100band_256x folder) from [huggingface](https://huggingface.co/lj1995/GPT-SoVITS/tree/main) and put them into `GPT_SoVITS\pretrained_models`.
 
    additional: for Audio Super Resolution model, you can read [how to download](./tools/AP_BWE_main/24kto48k/readme.txt)
+
+## V4 Release Notes
+
+New Features:
+
+1. Version 4 fixes the issue of metallic artifacts in Version 3 caused by non-integer multiple upsampling, and natively outputs 48k audio to prevent muffled sound (whereas Version 3 only natively outputs 24k audio). The author considers Version 4 a direct replacement for Version 3, though further testing is still needed.
+   [more details](<https://github.com/RVC-Boss/GPT-SoVITS/wiki/GPT%E2%80%90SoVITS%E2%80%90v3v4%E2%80%90features-(%E6%96%B0%E7%89%B9%E6%80%A7)>)
+
+Use v4 from v1/v2/v3 environment:
+
+1. `pip install -r requirements.txt` to update some packages
+
+2. Clone the latest codes from github.
+
+3. Download v4 pretrained models (gsv-v4-pretrained/s2v4.ckpt, and gsv-v4-pretrained/vocoder.pth) from [huggingface](https://huggingface.co/lj1995/GPT-SoVITS/tree/main) and put them into `GPT_SoVITS\pretrained_models`.
 
 ## Todo List
 
