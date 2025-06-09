@@ -12,7 +12,7 @@ BigVGAN
 __pycache__
 *.pyc
 env
-runtime
+runtime*
 .idea
 output
 logs
