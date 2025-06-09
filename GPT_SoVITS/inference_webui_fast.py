@@ -114,11 +114,11 @@ tts_config.device = device
 tts_config.is_half = is_half
 tts_config.version = version
 if gpt_path is not None:
-    if "！" in gpt_path:
+    if "！" in gpt_path or "!" in gpt_path:
         gpt_path = name2gpt_path[gpt_path]
     tts_config.t2s_weights_path = gpt_path
 if sovits_path is not None:
-    if "！" in sovits_path:
+    if "！" in sovits_path or "!" in sovits_path:
         sovits_path = name2sovits_path[sovits_path]
     tts_config.vits_weights_path = sovits_path
 if cnhubert_base_path is not None:
@@ -217,7 +217,7 @@ v3v4set = {"v3", "v4"}
 
 
 def change_sovits_weights(sovits_path, prompt_language=None, text_language=None):
-    if "！" in sovits_path:
+    if "！" in sovits_path or "!" in sovits_path:
         sovits_path = name2sovits_path[sovits_path]
     global version, model_version, dict_language, if_lora_v3
     version, model_version, if_lora_v3 = get_sovits_version_from_path_fast(sovits_path)
@@ -225,7 +225,7 @@ def change_sovits_weights(sovits_path, prompt_language=None, text_language=None)
     is_exist = is_exist_s2gv3 if model_version == "v3" else is_exist_s2gv4
     path_sovits = path_sovits_v3 if model_version == "v3" else path_sovits_v4
     if if_lora_v3 == True and is_exist == False:
-        info = path_sovits + i18n("SoVITS %s 底模缺失，无法加载相应 LoRA 权重" % model_version)
+        info = path_sovits + "SoVITS %s" % model_version + i18n("底模缺失，无法加载相应 LoRA 权重")
         gr.Warning(info)
         raise FileExistsError(info)
     dict_language = dict_language_v1 if version == "v1" else dict_language_v2
@@ -281,6 +281,12 @@ def change_sovits_weights(sovits_path, prompt_language=None, text_language=None)
         data["SoVITS"][version] = sovits_path
     with open("./weight.json", "w") as f:
         f.write(json.dumps(data))
+
+
+def change_gpt_weights(gpt_path):
+    if "！" in gpt_path or "!" in gpt_path:
+        gpt_path = name2gpt_path[gpt_path]
+    tts_pipeline.init_t2s_weights(gpt_path)
 
 
 with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False, js=js, css=css) as app:
@@ -457,7 +463,7 @@ with gr.Blocks(title="GPT-SoVITS WebUI", analytics_enabled=False, js=js, css=css
                 inference_button,
             ],
         )  #
-        GPT_dropdown.change(tts_pipeline.init_t2s_weights, [GPT_dropdown], [])
+        GPT_dropdown.change(change_gpt_weights, [GPT_dropdown], [])
 
     with gr.Group():
         gr.Markdown(
