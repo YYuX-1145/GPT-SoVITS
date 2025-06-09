@@ -1,10 +1,25 @@
-如果你已经用上了本项目，我认为你不需要下载此集成整合包！
 1.初次解压使用，请打开一次go-webui.bat，直到webui弹出为止可关闭，用于激活环境避免模块找不到报错。
 2.路径中不要有中文，以免日语G2P报错。
-3.声明：本整合包修改自官方整合包。代码仓库：https://github.com/YYuX-1145/GPT-SoVITS
-训练推理代码和官方仓库一致，内置模型没有任何删减，训练和推理不会有任何区别。
+3.本整合包重新配置了基于Python3.12的环境（torch 2.7.1+cu128），支持NVIDIA RTX50系显卡。原生推理速度比官方整合包（Python3.9）快10%。
+4.本整合包修改了api_v2相关代码以支持多进程（这对于高端型号显卡可以显著提升总体推理速度），代码仓库：https://github.com/YYuX-1145/GPT-SoVITS
 
 1. When unzipping and using it for the first time, please open go-webui.bat. You can close it after the webui pops up. This is used to activate the environment to avoid error messages due to modules not found.
 2. Chinese characters should not be in the fullpath to avoid errors in the Japanese G2P.
-3. Declaration: This integrated package is modified from the official integrated package. Code repository: https://github.com/YYuX-1145/GPT-SoVITS. 
-The code for training and inference is the same as that in the official repository and none of the built-in or pretrained models were removed. And there will be no difference in training and inference.
+3. This integrated package uses a newly configured environment based on Python 3.12 (torch 2.7.1+cu128), and supports NVIDIA RTX 50 series GPUs. Native inference speed is 10% faster compared to the official package (Python 3.9).
+4. The code related to api_v2 has been modified to support multiprocessing (which can significantly improve overall inference speed on high-end GPUs). Code repository: https://github.com/YYuX-1145/GPT-SoVITS
+
+预训练模型有所删减，以下是详细信息：
+Some pretrained models have been removed. Detailed information is as follows:
+
+=======内置的预训练模型=======Built-in pretrained models=======
+V2: GPT(s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt) + SoVITS(s2G2333k.pth ; s2D2333k.pth)
+V3: GPT(s1v3.ckpt)
+2506-V2ProSeries：SoVITS-V2ProPlus(s2Gv2ProPlus.pth ; s2Dv2ProPlus.pth)
+
+======已移除的预训练模型========Removed pretrained models======
+V1: GPT(s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt) + SoVITS(s2G488k.pth ; s2D488k.pth)
+V3: SoVITS(s2Gv3.pth)
+2506-V2ProSeries：SoVITS-V2Pro（s2Dv2Pro.pth ; s2Gv2Pro.pth）
+
+
+
