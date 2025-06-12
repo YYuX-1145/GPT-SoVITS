@@ -15,12 +15,8 @@ Some pretrained models have been removed. Detailed information is as follows:
 V2: GPT(s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt) + SoVITS(s2G2333k.pth ; s2D2333k.pth)
 V3: GPT(s1v3.ckpt)
 V4: s2Gv4.pth + vocoder.pth
-2506-V2ProSeries：SoVITS-V2ProPlus(s2Gv2ProPlus.pth ; s2Dv2ProPlus.pth)
+2506-V2ProSeries：SoVITS-V2Pro(s2Dv2Pro.pth ; s2Gv2Pro.pth) ; SoVITS-V2ProPlus(s2Gv2ProPlus.pth ; s2Dv2ProPlus.pth)
 
 ======已移除的预训练模型========Removed pretrained models======
 V1: GPT(s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt) + SoVITS(s2G488k.pth ; s2D488k.pth)
 V3: SoVITS(s2Gv3.pth)
-2506-V2ProSeries：SoVITS-V2Pro（s2Dv2Pro.pth ; s2Gv2Pro.pth）
-
-
-
