@@ -49,7 +49,7 @@ language = os.environ.get("language", "Auto")
 language = sys.argv[-1] if sys.argv[-1] in scan_language_list() else language
 i18n = I18nAuto(language=language)
 
-from filelock import WindowsFileLock
+from filelock import FileLock
 
 spec_min = -12
 spec_max = 2
@@ -356,7 +356,7 @@ class TTS_Config:
         else:
             print(i18n("路径不存在,使用默认配置"))
             self.save_configs(configs_path)
-        lock=WindowsFileLock(f"{configs_path}.lock")
+        lock=FileLock(f"{configs_path}.lock")
         with lock:
             with open(configs_path, 'r') as f:            
                 configs = yaml.load(f, Loader=yaml.FullLoader)    
@@ -370,7 +370,7 @@ class TTS_Config:
         if configs_path is None:
             configs_path = self.configs_path
 
-        lock=WindowsFileLock(f"{configs_path}.lock",timeout=3)
+        lock=FileLock(f"{configs_path}.lock",timeout=3)
         try:
             with lock:
                 with open(configs_path, 'w') as f:
