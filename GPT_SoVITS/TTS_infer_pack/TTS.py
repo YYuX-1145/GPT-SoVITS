@@ -554,9 +554,7 @@ class TTS:
             self.configs.use_vocoder = True
             self.init_vocoder(model_version)
             if "pretrained" not in weights_path and hasattr(vits_model, "enc_q"):
-                del vits_model.enc_q
-        if save:
-            self.configs.save_configs()            
+                del vits_model.enc_q    
 
         self.is_v2pro = model_version in {"v2Pro", "v2ProPlus"}
 
@@ -589,8 +587,8 @@ class TTS:
         if self.configs.is_half and str(self.configs.device) != "cpu":
             self.vits_model = self.vits_model.half()
 
-
-        self.configs.save_configs()
+        if save:
+            self.configs.save_configs()
 
 
 
