@@ -141,17 +141,17 @@ class T2SBlock:
     ):
         q, k, v = F.linear(self.to_mask(x, padding_mask), self.qkv_w, self.qkv_b).chunk(3, dim=-1)
 
-        batch_size = q.shape[0]
-        q_len = q.shape[1]
-        kv_len = k.shape[1]
+        batch_size, q_len, _ = q.shape
+        kv_len = q_len  # prompt 阶段 kv_len == q_len
 
         q = self.to_mask(q, padding_mask)
-        k_cache = self.to_mask(k, padding_mask)
-        v_cache = self.to_mask(v, padding_mask)
+        # 这一份是给 KV cache 用的，shape: [B, q_len, hidden_dim]
+        k_cache_src = self.to_mask(k, padding_mask)
+        v_cache_src = self.to_mask(v, padding_mask)
 
         q = q.view(batch_size, q_len, self.num_heads, -1).transpose(1, 2)
-        k = k_cache.view(batch_size, kv_len, self.num_heads, -1).transpose(1, 2)
-        v = v_cache.view(batch_size, kv_len, self.num_heads, -1).transpose(1, 2)
+        k = k_cache_src.view(batch_size, kv_len, self.num_heads, -1).transpose(1, 2)
+        v = v_cache_src.view(batch_size, kv_len, self.num_heads, -1).transpose(1, 2)
 
         if torch_sdpa:
             attn = F.scaled_dot_product_attention(q, k, v, ~attn_mask)
@@ -171,28 +171,45 @@ class T2SBlock:
             self.norm_b2,
             self.norm_eps2,
         )
-        return x, k_cache, v_cache
+        # 这里开始：构造固定大小的 KV cache，并返回已填区间边界
+        max_seq_len = 2000  # 或者用 self.max_seq_len
+
+        # k_cache_src, v_cache_src: [B, q_len, hidden_dim]
+        k_cache = x.new_zeros(batch_size, max_seq_len, k_cache_src.size(-1))
+        v_cache = x.new_zeros(batch_size, max_seq_len, v_cache_src.size(-1))
+
+        # 只把 prompt 部分写进去，其余位置保持 0（后续 decode 再逐步填）
+        k_cache[:, :q_len, :] = k_cache_src
+        v_cache[:, :q_len, :] = v_cache_src
+
+        cache_end = q_len  # 已经占用的 KV 区间是 [0, q_len)
+
+        return x, k_cache, v_cache, cache_end
 
     def decode_next_token(
         self,
         x: torch.Tensor,
+        idx: int,
         k_cache: torch.Tensor,
         v_cache: torch.Tensor,
         attn_mask: torch.Tensor = None,
         torch_sdpa: bool = True,
     ):
+        # q, k, v: [B, q_len, hidden_dim]，一般 q_len=1
         q, k, v = F.linear(x, self.qkv_w, self.qkv_b).chunk(3, dim=-1)
 
-        k_cache = torch.cat([k_cache, k], dim=1)
-        v_cache = torch.cat([v_cache, v], dim=1)
+        batch_size, q_len, _ = q.shape
 
-        batch_size = q.shape[0]
-        q_len = q.shape[1]
-        kv_len = k_cache.shape[1]
+        # 假设 k_cache / v_cache 形状是 [B, max_seq_len, hidden_dim]
+        # 把当前 step 的 k,v 写到位置 idx:idx+q_len
+        k_cache[:, idx:idx + q_len, :] = k
+        v_cache[:, idx:idx + q_len, :] = v
 
-        q = q.view(batch_size, q_len, self.num_heads, -1).transpose(1, 2)
-        k = k_cache.view(batch_size, kv_len, self.num_heads, -1).transpose(1, 2)
-        v = v_cache.view(batch_size, kv_len, self.num_heads, -1).transpose(1, 2)
+        kv_len = k_cache.shape[1]  # 固定为 max_seq_len
+
+        q = q.view(batch_size, q_len, self.num_heads, -1).transpose(1, 2)                  # [B, H, q_len, Dh]
+        k = k_cache.view(batch_size, kv_len, self.num_heads, -1).transpose(1, 2)          # [B, H, kv_len, Dh]
+        v = v_cache.view(batch_size, kv_len, self.num_heads, -1).transpose(1, 2)          # [B, H, kv_len, Dh]
 
         if torch_sdpa:
             attn = F.scaled_dot_product_attention(q, k, v, (~attn_mask) if attn_mask is not None else None)
@@ -218,7 +235,7 @@ class T2SBlock:
             self.norm_b2,
             self.norm_eps2,
         )
-        return x, k_cache, v_cache
+        return x
 
 
 @torch.jit.script
@@ -236,25 +253,28 @@ class T2STransformer:
     ):
         k_cache: List[torch.Tensor] = []
         v_cache: List[torch.Tensor] = []
+        idx = 0
         for i in range(self.num_blocks):
-            x, k_cache_, v_cache_ = self.blocks[i].process_prompt(x, attn_mask, padding_mask, torch_sdpa)
+            x, k_cache_, v_cache_, idx = self.blocks[i].process_prompt(x, attn_mask, padding_mask, torch_sdpa)
             k_cache.append(k_cache_)
             v_cache.append(v_cache_)
-        return x, k_cache, v_cache
+        return x, k_cache, v_cache, idx
 
+    @torch.compile
     def decode_next_token(
         self,
         x: torch.Tensor,
+        idx: int,
         k_cache: List[torch.Tensor],
         v_cache: List[torch.Tensor],
         attn_mask: torch.Tensor = None,
         torch_sdpa: bool = True,
     ):
         for i in range(self.num_blocks):
-            x, k_cache[i], v_cache[i] = self.blocks[i].decode_next_token(
-                x, k_cache[i], v_cache[i], attn_mask, torch_sdpa
+            x  = self.blocks[i].decode_next_token(
+                x, idx, k_cache[i], v_cache[i], attn_mask, torch_sdpa
             )
-        return x, k_cache, v_cache
+        return x, k_cache, v_cache, idx+1
 
 
 class Text2SemanticDecoder(nn.Module):
@@ -876,15 +896,21 @@ class Text2SemanticDecoder(nn.Module):
         )
 
         for idx in tqdm(range(1500)):
-            if xy_attn_mask is not None:
-                xy_dec, k_cache, v_cache = self.t2s_transformer.process_prompt(xy_pos, xy_attn_mask, None)
-            else:
-                xy_dec, k_cache, v_cache = self.t2s_transformer.decode_next_token(xy_pos, k_cache, v_cache)
-
+            if idx==0:
+                xy_dec, k_cache, v_cache, kvidx = self.t2s_transformer.process_prompt(xy_pos, xy_attn_mask, None)
+                decode_attn_mask = torch.ones(
+                    x.shape[0], self.t2s_transformer.blocks[0].num_heads, 1, 2000,
+                    dtype=torch.bool,
+                    device=x.device,
+                )
+                decode_attn_mask[:, :, :, :kvidx+1] = False 
+            else:                
+                xy_dec, k_cache, v_cache, kvidx = self.t2s_transformer.decode_next_token(xy_pos, kvidx, k_cache, v_cache, decode_attn_mask)                
+                decode_attn_mask[:, :, :, kvidx] = False
             logits = self.ar_predict_layer(xy_dec[:, -1])
 
-            if idx == 0:
-                xy_attn_mask = None
+            # if idx == 0:
+            #     xy_attn_mask = None
             if idx < 11:  ###至少预测出10个token不然不给停止（0.4s）
                 logits = logits[:, :-1]
 
