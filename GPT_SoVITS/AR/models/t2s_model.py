@@ -265,7 +265,7 @@ class T2STransformer:
                 v_cache.append(v_cache_)
         return x, k_cache, v_cache, idx
 
-    # @torch.compile(fullgraph=True, mode="reduce-overhead")
+    @torch.compile(mode="max-autotune-no-cudagraphs")
     def decode_next_token(
         self,
         x: torch.Tensor,
