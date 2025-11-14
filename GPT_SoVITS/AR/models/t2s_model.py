@@ -189,7 +189,7 @@ class T2SBlock:
     def decode_next_token(
         self,
         x: torch.Tensor,
-        idx: int,
+        idx: torch.Tensor,
         k_cache: torch.Tensor,
         v_cache: torch.Tensor,
         attn_mask: torch.Tensor = None,
@@ -202,8 +202,8 @@ class T2SBlock:
 
         # 假设 k_cache / v_cache 形状是 [B, max_seq_len, hidden_dim]
         # 把当前 step 的 k,v 写到位置 idx:idx+q_len
-        k_cache[:, idx:idx + q_len, :] = k
-        v_cache[:, idx:idx + q_len, :] = v
+        k_cache[:, idx, :] = k
+        v_cache[:, idx, :] = v
 
         kv_len = k_cache.shape[1]  # 固定为 max_seq_len
 
@@ -247,24 +247,29 @@ class T2STransformer:
     def process_prompt(
         self,
         x: torch.Tensor,
-        attn_mask: torch.Tensor,
+        attn_mask: torch.Tensor,        
+        k_cache: List[torch.Tensor],
+        v_cache: List[torch.Tensor],
         padding_mask: Optional[torch.Tensor] = None,
         torch_sdpa: bool = True,
     ):
-        k_cache: List[torch.Tensor] = []
-        v_cache: List[torch.Tensor] = []
+
         idx = 0
         for i in range(self.num_blocks):
             x, k_cache_, v_cache_, idx = self.blocks[i].process_prompt(x, attn_mask, padding_mask, torch_sdpa)
-            k_cache.append(k_cache_)
-            v_cache.append(v_cache_)
+            if len(k_cache)==self.num_blocks:
+                k_cache[i].copy_(k_cache_)
+                v_cache[i].copy_(v_cache_)
+            else:
+                k_cache.append(k_cache_)
+                v_cache.append(v_cache_)
         return x, k_cache, v_cache, idx
 
-    @torch.compile
+    # @torch.compile(fullgraph=True, mode="reduce-overhead")
     def decode_next_token(
         self,
         x: torch.Tensor,
-        idx: int,
+        idx: torch.Tensor,
         k_cache: List[torch.Tensor],
         v_cache: List[torch.Tensor],
         attn_mask: torch.Tensor = None,
@@ -274,7 +279,7 @@ class T2STransformer:
             x  = self.blocks[i].decode_next_token(
                 x, idx, k_cache[i], v_cache[i], attn_mask, torch_sdpa
             )
-        return x, k_cache, v_cache, idx+1
+        return x, k_cache, v_cache
 
 
 class Text2SemanticDecoder(nn.Module):
@@ -831,6 +836,34 @@ class Text2SemanticDecoder(nn.Module):
 
         return y_list, idx_list
 
+    @torch.jit.ignore
+    def capture(self):
+        if hasattr(self,"cuda_graph"):
+            return
+
+        self.kv_len = torch.tensor([0]).to(dtype=torch.int32).to('cuda')
+        self.decode_attn_mask = torch.ones(
+            1,
+            self.t2s_transformer.blocks[0].num_heads,
+            1,
+            2000,
+            dtype=torch.bool,
+            device='cuda',
+        )
+        self.k_cache=[]
+        self.v_cache=[]
+        self.input_x = torch.empty((1, 1, self.model_dim), dtype=self.bert_proj.weight.dtype, device='cuda')
+        self.t2s_transformer.process_prompt(self.input_x, torch.zeros((1, 1), dtype=torch.bool,device='cuda'), self.k_cache, self.v_cache)
+        self.cuda_graph = torch.cuda.CUDAGraph()
+        for _ in range(5):
+            self.out = self.t2s_transformer.decode_next_token(self.input_x, self.kv_len, self.k_cache, self.v_cache, self.decode_attn_mask)[0]
+        torch.cuda.synchronize()
+        # 预热抓图
+
+        with torch.cuda.graph(self.cuda_graph):
+            self.out = self.t2s_transformer.decode_next_token(self.input_x, self.kv_len, self.k_cache, self.v_cache, self.decode_attn_mask)[0]
+        torch.cuda.synchronize()
+
     def infer_panel_naive(
         self,
         x: torch.LongTensor,  #####全部文本token
@@ -894,19 +927,23 @@ class Text2SemanticDecoder(nn.Module):
             .view(bsz, self.num_head, src_len, src_len)
             .to(device=x.device, dtype=torch.bool)
         )
-
+        self.capture()
         for idx in tqdm(range(1500)):
             if idx==0:
-                xy_dec, k_cache, v_cache, kvidx = self.t2s_transformer.process_prompt(xy_pos, xy_attn_mask, None)
-                decode_attn_mask = torch.ones(
+                xy_dec, self.k_cache, self.v_cache, kvidx = self.t2s_transformer.process_prompt(xy_pos, xy_attn_mask, self.k_cache, self.v_cache, None)
+                self.kv_len[0]=kvidx
+                self.decode_attn_mask.copy_(torch.ones(
                     x.shape[0], self.t2s_transformer.blocks[0].num_heads, 1, 2000,
                     dtype=torch.bool,
                     device=x.device,
-                )
-                decode_attn_mask[:, :, :, :kvidx+1] = False 
+                ))
+                self.decode_attn_mask[:, :, :, :kvidx+1] = False 
             else:                
-                xy_dec, k_cache, v_cache, kvidx = self.t2s_transformer.decode_next_token(xy_pos, kvidx, k_cache, v_cache, decode_attn_mask)                
-                decode_attn_mask[:, :, :, kvidx] = False
+                # xy_dec, k_cache, v_cache, kvidx = self.t2s_transformer.decode_next_token(xy_pos, kvidx, k_cache, v_cache, self.decode_attn_mask)
+                self.cuda_graph.replay()
+                xy_dec = self.out.clone()
+                self.kv_len += 1
+                self.decode_attn_mask[:, :, :, self.kv_len] = False
             logits = self.ar_predict_layer(xy_dec[:, -1])
 
             # if idx == 0:
@@ -938,6 +975,7 @@ class Text2SemanticDecoder(nn.Module):
             xy_pos = y_emb * self.ar_audio_position.x_scale + self.ar_audio_position.alpha * self.ar_audio_position.pe[
                 :, y_len + idx
             ].to(dtype=y_emb.dtype, device=y_emb.device)
+            self.input_x.copy_(xy_pos)
 
         if ref_free:
             return y[:, :-1], 0
