@@ -984,6 +984,7 @@ def get_tts_wav(
         t1 = ttime()
     print("%.3f\t%.3f\t%.3f\t%.3f" % (t[0], sum(t[1::3]), sum(t[2::3]), sum(t[3::3])))
     audio_opt = torch.cat(audio_opt, 0)  # np.concatenate
+    print(f">>>>>RTF:{(sum(t)/(audio_opt.shape[-1]/32000)):.2f}")
     if model_version in {"v1", "v2", "v2Pro", "v2ProPlus"}:
         opt_sr = 32000
     elif model_version == "v3":

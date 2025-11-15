@@ -7,6 +7,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from torchmetrics.classification import MulticlassAccuracy
+from flash_attn import flash_attn_with_kvcache
 from tqdm import tqdm
 
 from AR.models.utils import (
@@ -70,7 +71,7 @@ def scaled_dot_product_attention(
     return attn_weight @ value
 
 
-@torch.jit.script
+# @torch.jit.script
 class T2SMLP:
     def __init__(self, w1, b1, w2, b2):
         self.w1 = w1
@@ -84,7 +85,7 @@ class T2SMLP:
         return x
 
 
-@torch.jit.script
+# @torch.jit.script
 class T2SBlock:
     def __init__(
         self,
@@ -198,7 +199,7 @@ class T2SBlock:
         # q, k, v: [B, q_len, hidden_dim]，一般 q_len=1
         q, k, v = F.linear(x, self.qkv_w, self.qkv_b).chunk(3, dim=-1)
 
-        batch_size, q_len, _ = q.shape
+        batch_size, q_len, _ = q.shape        
 
         # 假设 k_cache / v_cache 形状是 [B, max_seq_len, hidden_dim]
         # 把当前 step 的 k,v 写到位置 idx:idx+q_len
@@ -206,6 +207,11 @@ class T2SBlock:
         v_cache[:, idx, :] = v
 
         kv_len = k_cache.shape[1]  # 固定为 max_seq_len
+        q = q.view(batch_size, q_len, self.num_heads, -1)  # [B, H, q_len, Dh]
+
+        """
+        # 原版torch实现
+        
 
         q = q.view(batch_size, q_len, self.num_heads, -1).transpose(1, 2)                  # [B, H, q_len, Dh]
         k = k_cache.view(batch_size, kv_len, self.num_heads, -1).transpose(1, 2)          # [B, H, kv_len, Dh]
@@ -215,8 +221,20 @@ class T2SBlock:
             attn = F.scaled_dot_product_attention(q, k, v, (~attn_mask) if attn_mask is not None else None)
         else:
             attn = scaled_dot_product_attention(q, k, v, attn_mask)
+        """
+        attn = flash_attn_with_kvcache(
+            q,  # [B, 1, n_heads, Dh]
+            k_cache.view(batch_size, kv_len, self.num_heads, -1),  # [B, max_seq_len, n_heads, Dh]
+            v_cache.view(batch_size, kv_len, self.num_heads, -1),  # [B, max_seq_len, n_heads, Dh]
+            cache_seqlens=idx + 1,
+        )
 
-        attn = attn.transpose(1, 2).reshape(batch_size, q_len, -1)
+        # 原版实现
+        # attn = attn.transpose(1, 2).reshape(batch_size, q_len, -1)
+
+        # FA实现
+        attn = attn.view(batch_size, 1, self.hidden_dim)
+
         attn = F.linear(attn, self.out_w, self.out_b)
 
         x = x + attn
@@ -238,7 +256,7 @@ class T2SBlock:
         return x
 
 
-@torch.jit.script
+# @torch.jit.script
 class T2STransformer:
     def __init__(self, num_blocks: int, blocks: List[T2SBlock]):
         self.num_blocks: int = num_blocks
@@ -265,7 +283,7 @@ class T2STransformer:
                 v_cache.append(v_cache_)
         return x, k_cache, v_cache, idx
 
-    @torch.compile(mode="max-autotune-no-cudagraphs")
+    #@torch.compile(mode="max-autotune-no-cudagraphs")
     def decode_next_token(
         self,
         x: torch.Tensor,
@@ -932,18 +950,18 @@ class Text2SemanticDecoder(nn.Module):
             if idx==0:
                 xy_dec, self.k_cache, self.v_cache, kvidx = self.t2s_transformer.process_prompt(xy_pos, xy_attn_mask, self.k_cache, self.v_cache, None)
                 self.kv_len[0]=kvidx
-                self.decode_attn_mask.copy_(torch.ones(
-                    x.shape[0], self.t2s_transformer.blocks[0].num_heads, 1, 2000,
-                    dtype=torch.bool,
-                    device=x.device,
-                ))
-                self.decode_attn_mask[:, :, :, :kvidx+1] = False 
+                # self.decode_attn_mask.copy_(torch.ones(
+                #     x.shape[0], self.t2s_transformer.blocks[0].num_heads, 1, 2000,
+                #     dtype=torch.bool,
+                #     device=x.device,
+                # ))
+                # self.decode_attn_mask[:, :, :, :kvidx+1] = False 
             else:                
                 # xy_dec, k_cache, v_cache, kvidx = self.t2s_transformer.decode_next_token(xy_pos, kvidx, k_cache, v_cache, self.decode_attn_mask)
                 self.cuda_graph.replay()
                 xy_dec = self.out.clone()
                 self.kv_len += 1
-                self.decode_attn_mask[:, :, :, self.kv_len] = False
+                # self.decode_attn_mask[:, :, :, self.kv_len] = False
             logits = self.ar_predict_layer(xy_dec[:, -1])
 
             # if idx == 0:
